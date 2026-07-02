@@ -110,10 +110,13 @@ function robar(n) {
 }
 
 /* ============================================================
-   GEMINI — interpretación por combinaciones
+   INTERPRETACIÓN por combinaciones
+   La llamada a la IA (Groq) se hace del lado del servidor
+   mediante la función serverless /api/interpretar, así la
+   API key nunca queda expuesta en el navegador del cliente.
    ============================================================ */
 
-async function interpretar({ apiKey, tirada, cartas, pregunta }) {
+async function interpretar({ tirada, cartas, pregunta }) {
   const listado = cartas
     .map((c, i) => {
       const pos = tirada.posiciones[i] || `Carta ${i + 1}`;
@@ -148,25 +151,25 @@ Estructurá tu respuesta con estos títulos en negrita markdown:
 
 Tono empático y claro, sin fatalismos. ${tirada.n >= 9 ? "Como son muchas cartas, priorizá las combinaciones más significativas en vez de mencionar las 36 una por una." : ""} Máximo ~${tirada.n >= 9 ? 550 : 380} palabras.`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 1600 },
-      }),
-    }
-  );
+  const res = await fetch("/api/interpretar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, maxTokens: 1600 }),
+  });
 
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Gemini API ${res.status}: ${txt.slice(0, 200)}`);
+    let msg = `Error ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.error) msg = j.error;
+    } catch {
+      /* respuesta sin JSON */
+    }
+    throw new Error(msg);
   }
   const data = await res.json();
-  const out = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!out) throw new Error("Respuesta vacía de Gemini. Revisá tu API key.");
+  const out = data?.texto;
+  if (!out) throw new Error("Respuesta vacía del servidor.");
   return out;
 }
 
@@ -243,7 +246,6 @@ export default function LenormandApp() {
   const [cartas, setCartas] = useState([]);
   const [reveladas, setReveladas] = useState({});
   const [pregunta, setPregunta] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [interpretacion, setInterpretacion] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -282,16 +284,11 @@ export default function LenormandApp() {
   }
 
   async function pedirLectura() {
-    if (!apiKey.trim()) {
-      setError("Ingresá tu API key de Gemini para la interpretación.");
-      return;
-    }
     setError("");
     setCargando(true);
     setInterpretacion("");
     try {
       const texto = await interpretar({
-        apiKey: apiKey.trim(),
         tirada,
         cartas,
         pregunta: pregunta.trim(),
@@ -302,7 +299,7 @@ export default function LenormandApp() {
         100
       );
     } catch (e) {
-      setError(e.message || "Error al consultar Gemini.");
+      setError(e.message || "Error al generar la interpretación.");
     } finally {
       setCargando(false);
     }
@@ -325,7 +322,7 @@ export default function LenormandApp() {
 
       <header className="header">
         <h1 className="titulo" onClick={volver}>
-          <span className="titulo-orn">✦</span> Mariana Acosta{" "}
+          <span className="titulo-orn">✦</span> El Hilo del Destino{" "}
           <span className="titulo-orn">✦</span>
         </h1>
         <p className="subtitulo">Lectura de Lenormand · 36 cartas</p>
@@ -415,26 +412,6 @@ export default function LenormandApp() {
 
           {todasReveladas && (
             <section className="lectura-box">
-              <div className="campo-apikey">
-                <label>API key de Gemini</label>
-                <input
-                  type="password"
-                  placeholder="AIza..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <small>
-                  Gratis en{" "}
-                  <a
-                    href="https://aistudio.google.com/apikey"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    aistudio.google.com/apikey
-                  </a>
-                </small>
-              </div>
-
               <button
                 className="btn-principal"
                 onClick={pedirLectura}
