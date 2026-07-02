@@ -1,0 +1,14 @@
+/* Reset global mínimo. El resto de los estilos viven dentro del
+   componente LenormandApp (etiqueta <style> con sus fuentes y variables). */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  background: #0a0a1a;
+}
