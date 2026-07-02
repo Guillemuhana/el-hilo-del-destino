@@ -2,6 +2,45 @@ import React, { useState, useRef } from "react";
 import { IMAGENES } from "./imagenesCartas.js";
 
 /* ============================================================
+   CONFIGURACIÓN DE MONETIZACIÓN
+   El usuario tiene 1 lectura gratis. Después, para seguir,
+   debe coordinar el pago por WhatsApp.
+   ============================================================ */
+
+// Número de WhatsApp al que escribe el cliente para pagar.
+// Formato internacional SOLO dígitos (sin +, sin espacios, sin guiones).
+// Ej. Argentina: 54 9 11 1234-5678  ->  "5491112345678"
+// ⚠️ PENDIENTE: reemplazar por el número real.
+const WHATSAPP_NUMERO = "5491100000000";
+
+const PRECIO_LECTURA = "$5.000"; // texto que se muestra al usuario
+const LECTURAS_GRATIS = 1; // cuántas lecturas gratis antes del paywall
+const STORAGE_KEY = "hdd_lecturas_usadas";
+
+function lecturasHechas() {
+  try {
+    return parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function guardarLecturas(n) {
+  try {
+    localStorage.setItem(STORAGE_KEY, String(n));
+  } catch {
+    /* localStorage no disponible */
+  }
+}
+
+function linkWhatsApp() {
+  const msg = encodeURIComponent(
+    `¡Hola! Quiero seguir con mis lecturas de Lenormand en El Hilo del Destino. Vengo a coordinar el pago de mi próxima lectura (${PRECIO_LECTURA}).`
+  );
+  return `https://wa.me/${WHATSAPP_NUMERO}?text=${msg}`;
+}
+
+/* ============================================================
    BARAJA LENORMAND — 36 CARTAS (Piatnik clásica)
    Cada carta: número, nombre, palabra clave y significado.
    El Lenormand se lee DERECHO (no hay invertidas) y el
@@ -250,7 +289,10 @@ export default function LenormandApp() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [detalle, setDetalle] = useState(null);
+  const [lecturasUsadas, setLecturasUsadas] = useState(() => lecturasHechas());
   const resultRef = useRef(null);
+
+  const debePagar = lecturasUsadas >= LECTURAS_GRATIS;
 
   const tirada = tiradaKey ? TIRADAS[tiradaKey] : null;
   const todasReveladas =
@@ -284,6 +326,14 @@ export default function LenormandApp() {
   }
 
   async function pedirLectura() {
+    // Paywall: si ya usó su(s) lectura(s) gratis, no llama a la IA.
+    if (debePagar) {
+      setTimeout(
+        () => resultRef.current?.scrollIntoView({ behavior: "smooth" }),
+        100
+      );
+      return;
+    }
     setError("");
     setCargando(true);
     setInterpretacion("");
@@ -294,6 +344,10 @@ export default function LenormandApp() {
         pregunta: pregunta.trim(),
       });
       setInterpretacion(texto);
+      // Registra la lectura gratuita consumida.
+      const nuevas = lecturasHechas() + 1;
+      guardarLecturas(nuevas);
+      setLecturasUsadas(nuevas);
       setTimeout(
         () => resultRef.current?.scrollIntoView({ behavior: "smooth" }),
         100
@@ -412,15 +466,17 @@ export default function LenormandApp() {
 
           {todasReveladas && (
             <section className="lectura-box">
-              <button
-                className="btn-principal"
-                onClick={pedirLectura}
-                disabled={cargando}
-              >
-                {cargando
-                  ? "Leyendo las combinaciones…"
-                  : "✦ Interpretar la tirada"}
-              </button>
+              {!debePagar && (
+                <button
+                  className="btn-principal"
+                  onClick={pedirLectura}
+                  disabled={cargando}
+                >
+                  {cargando
+                    ? "Leyendo las combinaciones…"
+                    : "✦ Interpretar la tirada"}
+                </button>
+              )}
 
               {error && <div className="error">{error}</div>}
 
@@ -432,9 +488,35 @@ export default function LenormandApp() {
               )}
 
               {interpretacion && (
-                <div className="interpretacion" ref={resultRef}>
+                <div className="interpretacion">
                   <h3>✦ Tu lectura ✦</h3>
                   <Markdown texto={interpretacion} />
+                </div>
+              )}
+
+              {debePagar && (
+                <div className="paywall" ref={resultRef}>
+                  <div className="paywall-orn">🔮</div>
+                  <h3>El oráculo tiene más para revelarte</h3>
+                  <p>
+                    Ya disfrutaste de tu lectura de regalo. El hilo del destino
+                    sigue tejiéndose: para desbloquear tu próxima lectura
+                    completa, coordiná el pago por WhatsApp y seguimos.
+                  </p>
+                  <div className="paywall-precio">
+                    {PRECIO_LECTURA} <span>por lectura</span>
+                  </div>
+                  <a
+                    className="btn-principal btn-wa"
+                    href={linkWhatsApp()}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Continuar por WhatsApp →
+                  </a>
+                  <small className="paywall-nota">
+                    Te respondemos a la brevedad para habilitar tu lectura.
+                  </small>
                 </div>
               )}
             </section>
@@ -710,6 +792,46 @@ function Estilos() {
         color: var(--oro-claro); font-family: 'Cinzel', serif;
         font-size: 1.05rem; letter-spacing: 0.04em;
         display: inline-block; margin-top: 0.4rem;
+      }
+
+      .paywall {
+        text-align: center; max-width: 520px; margin: 1.5rem auto 0;
+        background: linear-gradient(160deg, rgba(42,26,74,0.55), rgba(20,11,36,0.7));
+        border: 1px solid var(--oro); border-radius: 18px;
+        padding: 2.2rem 1.8rem;
+        box-shadow: 0 18px 50px rgba(0,0,0,0.5), 0 0 30px rgba(200,162,74,0.12);
+        animation: aparecer .7s forwards;
+      }
+      .paywall-orn { font-size: 2.6rem; margin-bottom: 0.6rem; }
+      .paywall h3 {
+        font-family: 'Cinzel', serif; color: var(--oro-claro);
+        font-size: 1.4rem; letter-spacing: 0.04em; margin-bottom: 0.9rem;
+      }
+      .paywall p {
+        font-size: 1.14rem; line-height: 1.7; color: var(--texto);
+        margin-bottom: 1.3rem;
+      }
+      .paywall-precio {
+        font-family: 'Cinzel', serif; color: var(--oro-claro);
+        font-size: 2.1rem; line-height: 1; margin-bottom: 1.4rem;
+      }
+      .paywall-precio span {
+        display: block; font-family: 'Cormorant Garamond', serif;
+        font-size: 0.95rem; color: var(--texto-tenue);
+        letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.4rem;
+      }
+      .btn-wa {
+        text-decoration: none; display: inline-block;
+        background: linear-gradient(135deg, #25d366, #128c4b);
+        color: #ffffff; box-shadow: 0 8px 30px rgba(37,211,102,0.35);
+      }
+      .btn-wa:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 38px rgba(37,211,102,0.5);
+      }
+      .paywall-nota {
+        display: block; margin-top: 1rem; color: var(--texto-tenue);
+        font-style: italic; font-size: 0.98rem;
       }
 
       .footer {
