@@ -9,18 +9,24 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    res
-      .status(500)
-      .json({ error: "El servidor no tiene configurada la GROQ_API_KEY." });
-    return;
-  }
-
   try {
-    const { prompt, maxTokens } = req.body || {};
+    const { prompt, maxTokens, servicio } = req.body || {};
     if (!prompt) {
       res.status(400).json({ error: "Falta el prompt." });
+      return;
+    }
+
+    // El horóscopo puede usar una API key de Groq propia
+    // (GROQ_API_KEY_HOROSCOPO). Si no está seteada, cae en la key general.
+    const apiKey =
+      servicio === "horoscopo"
+        ? process.env.GROQ_API_KEY_HOROSCOPO || process.env.GROQ_API_KEY
+        : process.env.GROQ_API_KEY;
+
+    if (!apiKey) {
+      res
+        .status(500)
+        .json({ error: "El servidor no tiene configurada la GROQ_API_KEY." });
       return;
     }
 

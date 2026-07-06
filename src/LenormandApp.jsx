@@ -9,6 +9,9 @@ import {
   WandSparkles,
   MessageCircle,
   Eye,
+  Menu,
+  X,
+  Camera,
 } from "lucide-react";
 import { IMAGENES } from "./imagenesCartas.js";
 
@@ -187,6 +190,25 @@ const TIRADAS = {
 };
 
 /* ============================================================
+   SIGNOS DEL ZODÍACO — Horóscopo semanal
+   ============================================================ */
+
+const SIGNOS = [
+  { id: "aries", nombre: "Aries", glifo: "♈", fechas: "21 mar – 19 abr", elemento: "Fuego" },
+  { id: "tauro", nombre: "Tauro", glifo: "♉", fechas: "20 abr – 20 may", elemento: "Tierra" },
+  { id: "geminis", nombre: "Géminis", glifo: "♊", fechas: "21 may – 20 jun", elemento: "Aire" },
+  { id: "cancer", nombre: "Cáncer", glifo: "♋", fechas: "21 jun – 22 jul", elemento: "Agua" },
+  { id: "leo", nombre: "Leo", glifo: "♌", fechas: "23 jul – 22 ago", elemento: "Fuego" },
+  { id: "virgo", nombre: "Virgo", glifo: "♍", fechas: "23 ago – 22 sep", elemento: "Tierra" },
+  { id: "libra", nombre: "Libra", glifo: "♎", fechas: "23 sep – 22 oct", elemento: "Aire" },
+  { id: "escorpio", nombre: "Escorpio", glifo: "♏", fechas: "23 oct – 21 nov", elemento: "Agua" },
+  { id: "sagitario", nombre: "Sagitario", glifo: "♐", fechas: "22 nov – 21 dic", elemento: "Fuego" },
+  { id: "capricornio", nombre: "Capricornio", glifo: "♑", fechas: "22 dic – 19 ene", elemento: "Tierra" },
+  { id: "acuario", nombre: "Acuario", glifo: "♒", fechas: "20 ene – 18 feb", elemento: "Aire" },
+  { id: "piscis", nombre: "Piscis", glifo: "♓", fechas: "19 feb – 20 mar", elemento: "Agua" },
+];
+
+/* ============================================================
    UTILIDADES
    ============================================================ */
 
@@ -249,6 +271,96 @@ Tono empático y claro, sin fatalismos. ${tirada.n >= 9 ? "Como son muchas carta
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, maxTokens: 1600 }),
+  });
+
+  if (!res.ok) {
+    let msg = `Error ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.error) msg = j.error;
+    } catch {
+      /* respuesta sin JSON */
+    }
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const out = data?.texto;
+  if (!out) throw new Error("Respuesta vacía del servidor.");
+  return out;
+}
+
+/* ============================================================
+   HORÓSCOPO SEMANAL
+   Reutiliza la misma función serverless /api/interpretar.
+   Se cachea por signo + semana ISO en localStorage: así toda la
+   semana ve el mismo texto y no se regenera (ni se gasta) en cada clic.
+   ============================================================ */
+
+// Clave de semana ISO (ej. "2026-W28"): todos los signos comparten la
+// misma semana calendario, de lunes a domingo.
+function semanaISO(d = new Date()) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+// Rango legible de la semana actual (lunes a domingo).
+function rangoSemana(d = new Date()) {
+  const day = d.getDay() || 7;
+  const lunes = new Date(d);
+  lunes.setDate(d.getDate() - day + 1);
+  const domingo = new Date(lunes);
+  domingo.setDate(lunes.getDate() + 6);
+  const fmt = (x) =>
+    x.toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  return `${fmt(lunes)} al ${fmt(domingo)}`;
+}
+
+const HORO_KEY = (signoId) => `hdd_horoscopo_${signoId}`;
+
+function horoscopoGuardado(signoId) {
+  try {
+    const raw = localStorage.getItem(HORO_KEY(signoId));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj.semana !== semanaISO()) return null; // caducó la semana
+    return obj.texto;
+  } catch {
+    return null;
+  }
+}
+
+function guardarHoroscopo(signoId, texto) {
+  try {
+    localStorage.setItem(
+      HORO_KEY(signoId),
+      JSON.stringify({ semana: semanaISO(), texto })
+    );
+  } catch {
+    /* localStorage no disponible */
+  }
+}
+
+async function pedirHoroscopoIA(signo) {
+  const prompt = `Sos una astróloga cálida y cercana que habla en español rioplatense (usás "vos"). Escribís el HORÓSCOPO SEMANAL para el signo ${signo.nombre} (${signo.fechas}, elemento ${signo.elemento}), para la semana del ${rangoSemana()}.
+
+Estructurá la respuesta con estos títulos en negrita markdown, cada uno en su propia línea:
+**Panorama de la semana** — 2 o 3 frases sobre la energía general del signo esta semana.
+**Amor** — cómo viene el plano afectivo y los vínculos.
+**Trabajo y dinero** — oportunidades, cuidados y proyectos.
+**Salud y energía** — cuerpo, ánimo y bienestar.
+**El consejo de la semana** — una sola frase concreta y motivadora.
+**Tu talismán** — cerrá con el número de la suerte y el color de la semana (ej: "Número 7 · Color turquesa").
+
+Tono empático, inspirador y realista, sin fatalismos ni predicciones alarmistas. Máximo ~230 palabras en total. No uses encabezados con # ni listas con guiones: solo párrafos con el título en **negrita** al inicio.`;
+
+  const res = await fetch("/api/interpretar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, maxTokens: 900, servicio: "horoscopo" }),
   });
 
   if (!res.ok) {
@@ -414,6 +526,15 @@ export default function LenormandApp() {
   const [lecturasUsadas, setLecturasUsadas] = useState(() => lecturasHechas());
   const resultRef = useRef(null);
 
+  // Horóscopo semanal
+  const [signoSel, setSignoSel] = useState(null);
+  const [horoTexto, setHoroTexto] = useState("");
+  const [horoCargando, setHoroCargando] = useState(false);
+  const [horoError, setHoroError] = useState("");
+
+  // Menú (hamburguesa en celular)
+  const [menuAbierto, setMenuAbierto] = useState(false);
+
   const debePagar = lecturasUsadas >= LECTURAS_GRATIS;
 
   const tirada = tiradaKey ? TIRADAS[tiradaKey] : null;
@@ -430,6 +551,76 @@ export default function LenormandApp() {
     setError("");
     setDetalle(null);
     setPantalla("tirada");
+  }
+
+  function irHoroscopo() {
+    setSignoSel(null);
+    setHoroTexto("");
+    setHoroError("");
+    setPantalla("horoscopo");
+  }
+
+  // Navegación desde el menú principal
+  function irMenu(destino) {
+    setMenuAbierto(false);
+    if (destino === "horoscopo") {
+      irHoroscopo();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (destino === "contacto") {
+      setPantalla("contacto");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    // inicio y tarot vuelven al home; tarot además baja a las tiradas
+    volver();
+    if (destino === "tarot") {
+      setTimeout(
+        () =>
+          document
+            .getElementById("tiradas")
+            ?.scrollIntoView({ behavior: "smooth" }),
+        60
+      );
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  // Ítems del menú y cuál está activo según la pantalla
+  const MENU_ITEMS = [
+    { id: "inicio", label: "INICIO", activo: pantalla === "inicio" },
+    { id: "tarot", label: "TAROT", activo: pantalla === "tirada" },
+    {
+      id: "horoscopo",
+      label: "HORÓSCOPO",
+      activo: pantalla === "horoscopo" || pantalla === "signo",
+    },
+    { id: "contacto", label: "CONTACTO", activo: pantalla === "contacto" },
+  ];
+
+  async function abrirSigno(signo) {
+    setSignoSel(signo);
+    setHoroTexto("");
+    setHoroError("");
+    setPantalla("signo");
+
+    const cache = horoscopoGuardado(signo.id);
+    if (cache) {
+      setHoroTexto(cache);
+      return;
+    }
+    setHoroCargando(true);
+    try {
+      const texto = await pedirHoroscopoIA(signo);
+      guardarHoroscopo(signo.id, texto);
+      setHoroTexto(texto);
+    } catch (e) {
+      setHoroError(e.message || "No se pudo generar el horóscopo. Probá de nuevo.");
+    } finally {
+      setHoroCargando(false);
+    }
   }
 
   function revelar(i, e) {
@@ -515,11 +706,35 @@ export default function LenormandApp() {
 
       <header className="header">
         <div className="header-barra" />
-        <div className="header-inner">
-          <h1 className="titulo" onClick={volver}>
+        <div className="navbar">
+          <button className="navbar-marca" onClick={() => irMenu("inicio")}>
             El Hilo del Destino
-          </h1>
-          <p className="subtitulo">Lecturas de Lenormand online · 36 cartas</p>
+          </button>
+
+          <button
+            className="hamburguesa"
+            aria-label={menuAbierto ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={menuAbierto}
+            onClick={() => setMenuAbierto((v) => !v)}
+          >
+            {menuAbierto ? (
+              <X size={26} strokeWidth={2.4} />
+            ) : (
+              <Menu size={26} strokeWidth={2.4} />
+            )}
+          </button>
+
+          <nav className={`menu ${menuAbierto ? "abierto" : ""}`}>
+            {MENU_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                className={`menu-link ${item.activo ? "activo" : ""}`}
+                onClick={() => irMenu(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
@@ -694,6 +909,106 @@ export default function LenormandApp() {
         </main>
       )}
 
+      {pantalla === "horoscopo" && (
+        <main className="horoscopo">
+          <section className="horo-hero">
+            <h2 className="horo-titulo">Horóscopo Semanal</h2>
+            <p className="horo-semana">Semana del {rangoSemana()}</p>
+            <p className="intro">
+              Elegí tu signo y descubrí qué te deparan los astros esta semana en
+              el amor, el trabajo y la salud.
+            </p>
+          </section>
+
+          <div className="grid-signos">
+            {SIGNOS.map((s, idx) => (
+              <button
+                key={s.id}
+                className="signo-card"
+                style={{ animationDelay: `${idx * 55}ms` }}
+                onClick={() => abrirSigno(s)}
+              >
+                <span className="signo-glifo">{s.glifo}</span>
+                <span className="signo-nombre">{s.nombre}</span>
+                <span className="signo-fechas">{s.fechas}</span>
+              </button>
+            ))}
+          </div>
+        </main>
+      )}
+
+      {pantalla === "signo" && signoSel && (
+        <main className="mesa">
+          <div className="mesa-head">
+            <button className="btn-ghost" onClick={irHoroscopo}>
+              <ArrowLeft size={17} strokeWidth={2.4} /> Otros signos
+            </button>
+            <h2 className="mesa-titulo">
+              {signoSel.glifo} {signoSel.nombre}
+            </h2>
+            <span className="mesa-head-spacer" />
+          </div>
+
+          <div className="signo-detalle-meta">
+            {signoSel.fechas} · {signoSel.elemento} · Semana del {rangoSemana()}
+          </div>
+
+          {horoError && <div className="error">{horoError}</div>}
+
+          {horoCargando && (
+            <div className="cargando">
+              <div className="orbe" />
+              <p>Consultando a los astros…</p>
+            </div>
+          )}
+
+          {horoTexto && (
+            <div className="interpretacion">
+              <h3>
+                <Sparkles size={20} strokeWidth={2} /> Tu semana, {signoSel.nombre}
+              </h3>
+              <Markdown texto={horoTexto} />
+            </div>
+          )}
+        </main>
+      )}
+
+      {pantalla === "contacto" && (
+        <main className="contacto">
+          <div className="contacto-orn">
+            <Sparkles size={40} strokeWidth={1.6} />
+          </div>
+          <h2 className="contacto-titulo">Contacto</h2>
+          <p className="contacto-intro">
+            ¿Querés una lectura personalizada, coordinar un pago o simplemente
+            hacer una consulta? Escribinos y te respondemos a la brevedad.
+          </p>
+          <div className="contacto-acciones">
+            <a
+              className="btn-principal btn-wa"
+              href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
+                "¡Hola! Quiero hacer una consulta sobre El Hilo del Destino."
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={19} strokeWidth={2.2} /> Escribir por WhatsApp
+            </a>
+            <a
+              className="btn-ghost btn-ig"
+              href="https://instagram.com/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Camera size={18} strokeWidth={2.2} /> Instagram
+            </a>
+          </div>
+          <p className="contacto-nota">
+            El Hilo del Destino · Lecturas de Lenormand y horóscopo semanal
+          </p>
+        </main>
+      )}
+
       {pantalla === "inicio" && (
         <section className="banner-compartir">
           <div className="banner-overlay">
@@ -767,37 +1082,78 @@ function Estilos() {
         opacity: 0.5;
       }
 
-      .header, .inicio, .mesa, .footer, .banner-compartir { position: relative; z-index: 1; }
+      .header, .inicio, .mesa, .horoscopo, .contacto, .footer, .banner-compartir { position: relative; z-index: 1; }
 
-      /* HEADER */
-      .header { text-align: center; }
+      /* HEADER / NAVBAR */
+      .header {
+        position: sticky; top: 0; z-index: 50;
+      }
       .header-barra {
         height: 6px;
         background: linear-gradient(90deg, var(--turquesa), var(--turquesa-claro), var(--dorado));
       }
-      .header-inner {
+      .navbar {
         background: var(--superficie);
-        padding: 1.6rem 1rem 1.6rem;
         border-bottom: 1px solid var(--borde);
         box-shadow: 0 2px 14px rgba(15,60,75,0.05);
-        display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; padding: 0.9rem 1.5rem;
+        max-width: 1200px; margin: 0 auto;
+        position: relative;
       }
-      .logo-header {
-        height: 52px; width: auto; cursor: pointer;
-        border-radius: 12px;
-        box-shadow: 0 6px 18px rgba(10,32,39,0.22);
-        transition: transform .2s ease;
-      }
-      .logo-header:hover { transform: translateY(-2px) scale(1.02); }
-      .titulo {
+      .navbar-marca {
+        border: none; background: transparent; cursor: pointer;
         font-family: 'Poppins', sans-serif; font-weight: 700;
-        font-size: clamp(1.7rem, 5vw, 2.5rem);
-        letter-spacing: -0.01em; cursor: pointer;
-        color: var(--turquesa-fuerte);
+        font-size: clamp(1.15rem, 3vw, 1.5rem);
+        letter-spacing: -0.01em; color: var(--turquesa-fuerte);
+        white-space: nowrap;
       }
-      .subtitulo {
-        color: var(--texto-suave); letter-spacing: 0.06em;
-        font-size: 0.9rem; margin-top: 0.4rem; font-weight: 600;
+      .menu {
+        display: flex; align-items: center; gap: 0.4rem;
+      }
+      .menu-link {
+        border: none; background: transparent; cursor: pointer;
+        font-family: 'Poppins', sans-serif; font-weight: 600;
+        font-size: 0.9rem; letter-spacing: 0.08em; color: var(--texto);
+        padding: 0.55rem 1rem; border-radius: 8px;
+        position: relative; transition: color .2s, background .2s;
+      }
+      .menu-link::after {
+        content: ""; position: absolute; left: 1rem; right: 1rem; bottom: 0.35rem;
+        height: 2px; border-radius: 2px; background: var(--dorado);
+        transform: scaleX(0); transform-origin: center; transition: transform .22s ease;
+      }
+      .menu-link:hover { color: var(--turquesa-fuerte); }
+      .menu-link:hover::after { transform: scaleX(1); }
+      .menu-link.activo { color: var(--turquesa-fuerte); }
+      .menu-link.activo::after { transform: scaleX(1); }
+
+      .hamburguesa {
+        display: none; border: none; background: transparent; cursor: pointer;
+        color: var(--turquesa-fuerte); padding: 0.3rem; line-height: 0;
+      }
+
+      @media (max-width: 760px) {
+        .navbar { padding: 0.8rem 1.1rem; }
+        .hamburguesa { display: inline-flex; }
+        .menu {
+          position: absolute; top: 100%; left: 0; right: 0;
+          flex-direction: column; align-items: stretch; gap: 0;
+          background: var(--superficie);
+          border-bottom: 1px solid var(--borde);
+          box-shadow: 0 12px 24px rgba(15,60,75,0.10);
+          padding: 0.4rem 0.8rem 0.8rem;
+          transform-origin: top;
+          opacity: 0; transform: translateY(-8px); pointer-events: none;
+          transition: opacity .2s ease, transform .2s ease;
+        }
+        .menu.abierto { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .menu-link {
+          text-align: left; padding: 0.9rem 0.8rem; border-radius: 10px;
+          font-size: 1rem;
+        }
+        .menu-link::after { display: none; }
+        .menu-link.activo { background: var(--turquesa-suave); }
       }
 
       /* CARRUSEL HERO (full-width) */
@@ -901,6 +1257,85 @@ function Estilos() {
         color: var(--turquesa-fuerte); font-family: 'Poppins', sans-serif;
         font-weight: 700; font-size: 0.92rem; margin-top: 0.3rem;
         display: inline-flex; align-items: center; gap: 0.35rem;
+      }
+
+      /* HORÓSCOPO SEMANAL */
+      .horoscopo { max-width: 1040px; margin: 2.4rem auto 0; padding: 0 1rem; }
+      .horo-hero { text-align: center; margin-bottom: 2rem; }
+      .horo-titulo {
+        font-family: 'Poppins', sans-serif; font-weight: 800;
+        font-size: clamp(1.8rem, 5vw, 2.6rem); color: var(--turquesa-fuerte);
+        letter-spacing: -0.01em;
+      }
+      .horo-semana {
+        font-family: 'Poppins', sans-serif; font-weight: 600;
+        color: var(--dorado-fuerte); font-size: 1rem; margin: 0.4rem 0 0.9rem;
+        text-transform: capitalize;
+      }
+      .horo-hero .intro { max-width: 620px; margin: 0 auto; }
+      .grid-signos {
+        display: grid; gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+      .signo-card {
+        background: var(--superficie); border: 1px solid var(--borde);
+        border-radius: 14px; padding: 1.4rem 1rem 1.2rem; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+        color: var(--texto); text-align: center;
+        transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+        opacity: 0; animation: subir 0.5s forwards;
+      }
+      .signo-card:hover {
+        transform: translateY(-4px); border-color: var(--turquesa);
+        box-shadow: 0 14px 34px rgba(15,60,75,0.12);
+      }
+      .signo-glifo {
+        font-size: 2.6rem; line-height: 1; color: var(--rojo);
+        display: flex; align-items: center; justify-content: center;
+        width: 70px; height: 70px; margin-bottom: 0.3rem;
+      }
+      .signo-nombre {
+        font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 1.05rem;
+        color: var(--turquesa-fuerte);
+      }
+      .signo-fechas {
+        color: var(--texto-suave); font-size: 0.82rem; font-weight: 600;
+      }
+      .mesa-head-spacer { flex: 0 0 auto; width: 120px; }
+      .signo-detalle-meta {
+        text-align: center; color: var(--texto-suave); font-weight: 600;
+        font-size: 0.95rem; margin: -0.6rem auto 1.6rem; text-transform: capitalize;
+      }
+      @media (max-width: 560px) {
+        .mesa-head-spacer { display: none; }
+      }
+
+      /* CONTACTO */
+      .contacto {
+        max-width: 620px; margin: 3rem auto 0; padding: 2.6rem 1.6rem;
+        text-align: center; background: var(--superficie);
+        border: 1px solid var(--borde); border-radius: 18px;
+        box-shadow: 0 14px 40px rgba(15,60,75,0.08);
+      }
+      .contacto-orn {
+        color: var(--dorado-fuerte); display: flex; justify-content: center;
+        margin-bottom: 0.6rem;
+      }
+      .contacto-titulo {
+        font-family: 'Poppins', sans-serif; font-weight: 800;
+        font-size: clamp(1.7rem, 5vw, 2.3rem); color: var(--turquesa-fuerte);
+      }
+      .contacto-intro {
+        color: var(--texto-suave); line-height: 1.65; font-size: 1.05rem;
+        margin: 0.9rem auto 1.8rem; max-width: 460px;
+      }
+      .contacto-acciones {
+        display: flex; gap: 0.8rem; justify-content: center; flex-wrap: wrap;
+      }
+      .btn-ig { text-decoration: none; }
+      .contacto-nota {
+        margin-top: 1.8rem; color: var(--texto-suave);
+        font-size: 0.85rem; font-weight: 600;
       }
 
       /* MESA DE TIRADA */
