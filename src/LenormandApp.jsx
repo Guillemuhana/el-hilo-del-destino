@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import {
   Sparkles,
@@ -294,6 +294,53 @@ function Markdown({ texto }) {
 }
 
 /* ============================================================
+   CARRUSEL HERO (full-width, crossfade + Ken Burns)
+   ============================================================ */
+
+const HERO_SLIDES = ["/img/hero-slide-1.webp", "/img/hero-slide-2.webp"];
+
+function HeroSlider() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(
+      () => setI((n) => (n + 1) % HERO_SLIDES.length),
+      5500
+    );
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <section className="hero-slider">
+      <AnimatePresence>
+        <motion.img
+          key={i}
+          src={HERO_SLIDES[i]}
+          alt=""
+          className="hero-slider-img"
+          initial={{ opacity: 0, scale: 1.06 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{
+            opacity: { duration: 1.1, ease: "easeInOut" },
+            scale: { duration: 6.5, ease: "easeOut" },
+          }}
+        />
+      </AnimatePresence>
+      <div className="hero-slider-fade" />
+      <div className="hero-dots">
+        {HERO_SLIDES.map((_, idx) => (
+          <button
+            key={idx}
+            className={`hero-dot ${idx === i ? "activo" : ""}`}
+            aria-label={`Ir al slide ${idx + 1}`}
+            onClick={() => setI(idx)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ============================================================
    COMPONENTE CARTA
    ============================================================ */
 
@@ -484,9 +531,7 @@ export default function LenormandApp() {
 
       {pantalla === "inicio" && (
         <main className="inicio">
-          <section className="hero-slide">
-            <img src="/img/hero-slide.webp" alt="" />
-          </section>
+          <HeroSlider />
 
           <section className="hero">
             <div className="hero-texto">
@@ -761,16 +806,30 @@ function Estilos() {
         font-size: 0.9rem; margin-top: 0.4rem; font-weight: 600;
       }
 
-      /* HERO SLIDE (banner bajo el header) */
-      .hero-slide {
-        max-width: 1100px; margin: 1.8rem auto 0; padding: 0 1rem;
+      /* CARRUSEL HERO (full-width) */
+      .hero-slider {
+        position: relative; width: 100%;
+        height: clamp(280px, 44vw, 640px);
+        overflow: hidden; background: #0a2027;
       }
-      .hero-slide img {
-        display: block; width: 100%; height: auto;
-        border-radius: 18px;
-        box-shadow: 0 14px 40px rgba(15,60,75,0.16);
-        border: 1px solid var(--borde);
+      .hero-slider-img {
+        position: absolute; inset: 0; display: block;
+        width: 100%; height: 100%; object-fit: cover;
       }
+      .hero-slider-fade {
+        position: absolute; inset: 0; pointer-events: none; z-index: 1;
+        background: linear-gradient(180deg, rgba(0,0,0,0) 72%, rgba(10,32,39,0.28) 100%);
+      }
+      .hero-dots {
+        position: absolute; left: 0; right: 0; bottom: 16px; z-index: 2;
+        display: flex; justify-content: center; gap: 0.55rem;
+      }
+      .hero-dot {
+        width: 10px; height: 10px; border-radius: 50%; cursor: pointer;
+        border: none; padding: 0; background: rgba(255,255,255,0.6);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.35); transition: all .25s;
+      }
+      .hero-dot.activo { background: var(--dorado); width: 26px; border-radius: 6px; }
 
       /* HERO (texto + ilustracion) */
       .hero {
