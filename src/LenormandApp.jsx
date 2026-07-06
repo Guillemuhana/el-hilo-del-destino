@@ -516,12 +516,6 @@ export default function LenormandApp() {
       <header className="header">
         <div className="header-barra" />
         <div className="header-inner">
-          <img
-            src="/img/logo-badge.webp"
-            alt="El Hilo del Destino"
-            className="logo-header"
-            onClick={volver}
-          />
           <h1 className="titulo" onClick={volver}>
             El Hilo del Destino
           </h1>
