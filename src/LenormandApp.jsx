@@ -560,6 +560,27 @@ export default function LenormandApp() {
     setPantalla("horoscopo");
   }
 
+  // Compartir la app por WhatsApp (con imagen destacada vía og:image)
+  async function compartirApp() {
+    const url = window.location.origin || window.location.href;
+    const texto =
+      "🔮 Descubrí tu lectura de Lenormand y tu horóscopo semanal en El Hilo del Destino:";
+    // En celular, el menú nativo de compartir es mejor (deja elegir WhatsApp)
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "El Hilo del Destino", text: texto, url });
+        return;
+      } catch {
+        /* el usuario canceló: seguimos al fallback de WhatsApp */
+      }
+    }
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(`${texto} ${url}`)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
   // Navegación desde el menú principal
   function irMenu(destino) {
     setMenuAbierto(false);
@@ -1016,26 +1037,91 @@ export default function LenormandApp() {
               <Sparkles size={20} strokeWidth={2} /> Regalá una lectura
             </h3>
             <p>
-              Compartí El Hilo del Destino con quien quieras, o volvé a tirar
-              las cartas para explorar otra pregunta.
+              Compartí El Hilo del Destino con quien quieras: mandá el link por
+              WhatsApp y que descubran su tirada y su horóscopo.
             </p>
-            <button
-              className="btn-banner"
-              onClick={() =>
-                document
-                  .getElementById("tiradas")
-                  ?.scrollIntoView({ behavior: "smooth" })
-              }
-            >
-              Elegir otra tirada <ArrowRight size={16} strokeWidth={2.5} />
+            <button className="btn-banner" onClick={compartirApp}>
+              <MessageCircle size={18} strokeWidth={2.4} /> Compartir por WhatsApp
+            </button>
+          </div>
+        </section>
+      )}
+
+      {pantalla === "inicio" && (
+        <section className="home-horoscopo">
+          <div className="home-horo-inner">
+            <p className="home-horo-kicker">
+              Horóscopo semanal · Semana del {rangoSemana()}
+            </p>
+            <h3 className="home-horo-titulo">
+              ¿Qué te deparan los astros esta semana?
+            </h3>
+            <p className="home-horo-texto">
+              Elegí tu signo y recibí tu predicción de amor, trabajo y salud.
+            </p>
+            <div className="home-horo-signos">
+              {SIGNOS.map((s) => (
+                <button
+                  key={s.id}
+                  className="home-horo-signo"
+                  onClick={() => abrirSigno(s)}
+                  title={s.nombre}
+                >
+                  <span className="home-horo-glifo">{s.glifo}</span>
+                  <span className="home-horo-nombre">{s.nombre}</span>
+                </button>
+              ))}
+            </div>
+            <button className="btn-banner" onClick={irHoroscopo}>
+              Ver mi horóscopo <ArrowRight size={16} strokeWidth={2.5} />
             </button>
           </div>
         </section>
       )}
 
       <footer className="footer">
-        <p>Las cartas son un espejo, no un destino. Confiá en tu criterio.</p>
-        <p className="footer-marca">El Hilo del Destino</p>
+        <div className="footer-grid">
+          <div className="footer-col footer-brand">
+            <div className="footer-marca">El Hilo del Destino</div>
+            <p className="footer-desc">
+              Lecturas de Lenormand con interpretación por inteligencia
+              artificial y horóscopo semanal de los 12 signos.
+            </p>
+            <button className="footer-compartir" onClick={compartirApp}>
+              <MessageCircle size={16} strokeWidth={2.4} /> Compartir por WhatsApp
+            </button>
+          </div>
+
+          <div className="footer-col">
+            <h4>Navegación</h4>
+            <button onClick={() => irMenu("inicio")}>Inicio</button>
+            <button onClick={() => irMenu("tarot")}>Tarot</button>
+            <button onClick={() => irMenu("horoscopo")}>Horóscopo</button>
+            <button onClick={() => irMenu("contacto")}>Contacto</button>
+          </div>
+
+          <div className="footer-col">
+            <h4>Contacto</h4>
+            <a
+              href={`https://wa.me/${WHATSAPP_NUMERO}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              WhatsApp
+            </a>
+            <a href="https://instagram.com/" target="_blank" rel="noreferrer">
+              Instagram
+            </a>
+          </div>
+        </div>
+
+        <div className="footer-bottom">
+          <p>Las cartas son un espejo, no un destino. Confiá en tu criterio.</p>
+          <p>
+            © {new Date().getFullYear()} El Hilo del Destino · Todos los derechos
+            reservados
+          </p>
+        </div>
       </footer>
     </div>
   );
@@ -1072,7 +1158,6 @@ function Estilos() {
         color: var(--texto);
         font-family: 'Nunito', sans-serif;
         position: relative; overflow-x: hidden;
-        padding-bottom: 4rem;
       }
       /* textura sutil repetible superpuesta al color de fondo */
       .app::before {
@@ -1082,7 +1167,7 @@ function Estilos() {
         opacity: 0.5;
       }
 
-      .header, .inicio, .mesa, .horoscopo, .contacto, .footer, .banner-compartir { position: relative; z-index: 1; }
+      .header, .inicio, .mesa, .horoscopo, .contacto, .footer, .banner-compartir, .home-horoscopo { position: relative; z-index: 1; }
 
       /* HEADER / NAVBAR */
       .header {
@@ -1561,16 +1646,91 @@ function Estilos() {
         font-size: 0.92rem; font-weight: 600;
       }
 
+      /* FOOTER */
       .footer {
-        text-align: center; margin-top: 4rem; padding: 2rem 1rem 0;
-        color: var(--texto-suave); font-size: 0.92rem;
-        border-top: 1px solid var(--borde); max-width: 600px;
-        margin-left: auto; margin-right: auto;
+        margin-top: 4.5rem;
+        background: #0a2027;
+        color: rgba(255,255,255,0.72);
+        border-top: 4px solid transparent;
+        border-image: linear-gradient(90deg, var(--turquesa), var(--turquesa-claro), var(--dorado)) 1;
       }
+      .footer-grid {
+        max-width: 1040px; margin: 0 auto; padding: 2.8rem 1.5rem 2rem;
+        display: grid; gap: 2rem;
+        grid-template-columns: 1.6fr 1fr 1fr;
+      }
+      .footer-col { display: flex; flex-direction: column; gap: 0.7rem; align-items: flex-start; }
+      .footer-col h4 {
+        font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 0.8rem;
+        text-transform: uppercase; letter-spacing: 0.1em; color: var(--dorado);
+        margin-bottom: 0.2rem;
+      }
+      .footer-col button, .footer-col a {
+        background: none; border: none; padding: 0; cursor: pointer;
+        color: rgba(255,255,255,0.72); font-family: 'Nunito', sans-serif;
+        font-size: 0.95rem; font-weight: 600; text-align: left;
+        text-decoration: none; transition: color .2s;
+      }
+      .footer-col button:hover, .footer-col a:hover { color: #fff; }
       .footer-marca {
-        margin-top: 0.4rem; font-family: 'Poppins', sans-serif;
-        font-weight: 700; color: var(--turquesa-fuerte); font-size: 0.85rem;
+        font-family: 'Poppins', sans-serif; font-weight: 700;
+        color: #fff; font-size: 1.25rem;
       }
+      .footer-desc { line-height: 1.6; font-size: 0.95rem; max-width: 340px; }
+      .footer-compartir {
+        margin-top: 0.4rem; display: inline-flex; align-items: center; gap: 0.45rem;
+        background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16);
+        color: #fff; padding: 0.6rem 1.1rem; border-radius: 9px; cursor: pointer;
+        font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 0.9rem;
+        transition: background .2s;
+      }
+      .footer-compartir:hover { background: rgba(255,255,255,0.16); }
+      .footer-bottom {
+        border-top: 1px solid rgba(255,255,255,0.1);
+        padding: 1.3rem 1.5rem; text-align: center;
+        display: flex; flex-direction: column; gap: 0.3rem;
+        font-size: 0.85rem; color: rgba(255,255,255,0.55);
+      }
+      @media (max-width: 720px) {
+        .footer-grid { grid-template-columns: 1fr; gap: 1.6rem; text-align: center; }
+        .footer-col { align-items: center; }
+        .footer-desc { margin: 0 auto; }
+      }
+
+      /* HORÓSCOPO EN EL HOME */
+      .home-horoscopo { max-width: 1040px; margin: 3.5rem auto 0; padding: 0 1rem; }
+      .home-horo-inner {
+        background: radial-gradient(120% 140% at 15% 0%, #0e3a46 0%, #0a2027 60%);
+        border-radius: 18px; padding: 2.4rem 2rem;
+        text-align: center; color: #fff;
+        box-shadow: 0 12px 34px rgba(10,32,39,0.22);
+      }
+      .home-horo-kicker {
+        font-family: 'Poppins', sans-serif; font-weight: 600;
+        color: var(--dorado); font-size: 0.85rem;
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      .home-horo-titulo {
+        font-family: 'Poppins', sans-serif; font-weight: 700;
+        font-size: clamp(1.4rem, 4vw, 2rem); margin: 0.5rem 0 0.4rem;
+      }
+      .home-horo-texto { color: rgba(255,255,255,0.78); font-size: 1.02rem; }
+      .home-horo-signos {
+        display: flex; flex-wrap: wrap; justify-content: center;
+        gap: 0.6rem; margin: 1.6rem 0;
+      }
+      .home-horo-signo {
+        display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px; padding: 0.7rem 0.4rem; width: 78px; cursor: pointer;
+        color: #fff; transition: transform .2s, background .2s, border-color .2s;
+      }
+      .home-horo-signo:hover {
+        transform: translateY(-3px); background: rgba(255,255,255,0.12);
+        border-color: var(--dorado);
+      }
+      .home-horo-glifo { font-size: 1.5rem; line-height: 1; color: var(--dorado); }
+      .home-horo-nombre { font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.85); }
 
       /* BANNER COMPARTIR */
       .banner-compartir { max-width: 1040px; margin: 3.5rem auto 0; padding: 0 1rem; }
