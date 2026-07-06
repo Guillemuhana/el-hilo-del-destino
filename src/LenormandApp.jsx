@@ -1,5 +1,52 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
+import {
+  Sparkles,
+  ArrowLeft,
+  ArrowRight,
+  Shuffle,
+  WandSparkles,
+  MessageCircle,
+  Eye,
+} from "lucide-react";
 import { IMAGENES } from "./imagenesCartas.js";
+
+/* ============================================================
+   EFECTOS — destellos magicos (canvas-confetti)
+   ============================================================ */
+
+const COLORES_MAGIA = ["#f0c929", "#29cceb", "#0e9dbb", "#ffffff"];
+
+function chispas(x = 0.5, y = 0.5) {
+  confetti({
+    particleCount: 24,
+    spread: 60,
+    startVelocity: 20,
+    gravity: 0.6,
+    scalar: 0.9,
+    ticks: 90,
+    origin: { x, y },
+    colors: COLORES_MAGIA,
+    shapes: ["star", "circle"],
+    disableForReducedMotion: true,
+  });
+}
+
+function granFinale() {
+  confetti({
+    particleCount: 90,
+    spread: 105,
+    startVelocity: 38,
+    gravity: 0.7,
+    scalar: 1,
+    ticks: 150,
+    origin: { x: 0.5, y: 0.32 },
+    colors: COLORES_MAGIA,
+    shapes: ["star", "circle"],
+    disableForReducedMotion: true,
+  });
+}
 
 /* ============================================================
    CONFIGURACIÓN DE MONETIZACIÓN
@@ -99,7 +146,7 @@ const TIRADAS = {
     n: 1,
     tipo: "lineal",
     posiciones: ["Tu día"],
-    icono: "☀️",
+    icono: "/img/icono-carta-dia.webp",
     badge: "Rápida",
   },
   tres: {
@@ -108,7 +155,7 @@ const TIRADAS = {
     n: 3,
     tipo: "lineal",
     posiciones: ["Pasado / Origen", "Presente / Situación", "Futuro / Resultado"],
-    icono: "🔮",
+    icono: "/img/icono-tres.webp",
     badge: "La más elegida",
   },
   nueve: {
@@ -123,7 +170,7 @@ const TIRADAS = {
       "Base", "El tema central", "Lo que se desarrolla",
       "Influencia oculta", "Consejo", "Resultado",
     ],
-    icono: "✦",
+    icono: "/img/icono-nueve.webp",
     badge: "En profundidad",
   },
   gran_tableau: {
@@ -134,7 +181,7 @@ const TIRADAS = {
     filas: 4,
     cols: 9,
     posiciones: Array.from({ length: 36 }, (_, i) => `Posición ${i + 1}`),
-    icono: "🎴",
+    icono: "/img/icono-tableau.webp",
     badge: "La más completa",
   },
 };
@@ -250,11 +297,25 @@ function Markdown({ texto }) {
    COMPONENTE CARTA
    ============================================================ */
 
-function Carta({ carta, posicion, revelada, onClick, delay, compacta }) {
+function Carta({ carta, posicion, revelada, onClick, index, compacta }) {
   return (
-    <div
+    <motion.div
       className={`carta-wrap ${compacta ? "compacta" : ""}`}
-      style={{ animationDelay: `${delay}ms` }}
+      initial={{ opacity: 0, y: 26, scale: 0.82, rotate: compacta ? 0 : -5 }}
+      animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+      transition={{
+        type: "spring",
+        stiffness: 280,
+        damping: 20,
+        delay: index * (compacta ? 0.018 : 0.09),
+      }}
+      whileHover={{
+        y: -10,
+        scale: compacta ? 1.12 : 1.06,
+        zIndex: 5,
+        transition: { type: "spring", stiffness: 320, damping: 14 },
+      }}
+      whileTap={{ scale: 0.96 }}
     >
       {posicion && !compacta && <div className="carta-pos">{posicion}</div>}
       <button
@@ -271,15 +332,21 @@ function Carta({ carta, posicion, revelada, onClick, delay, compacta }) {
               src={`data:image/webp;base64,${IMG[carta.id]}`}
               alt={carta.nombre}
             />
+            <span className="carta-brillo" />
           </div>
         </div>
       </button>
       {revelada && !compacta && (
-        <div className="carta-label">
+        <motion.div
+          className="carta-label"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
           <span className="carta-num">{carta.id}</span> {carta.nombre}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -318,10 +385,17 @@ export default function LenormandApp() {
     setPantalla("tirada");
   }
 
-  function revelar(i) {
+  function revelar(i, e) {
     if (compacta && reveladas[i]) {
       setDetalle(cartas[i]);
       return;
+    }
+    if (!reveladas[i] && e?.currentTarget) {
+      const r = e.currentTarget.getBoundingClientRect();
+      chispas(
+        (r.left + r.width / 2) / window.innerWidth,
+        (r.top + r.height / 2) / window.innerHeight
+      );
     }
     setReveladas((r) => ({ ...r, [i]: true }));
     if (compacta) setDetalle(cartas[i]);
@@ -332,6 +406,17 @@ export default function LenormandApp() {
     cartas.forEach((_, i) => (all[i] = true));
     setReveladas(all);
   }
+
+  // Estallido de destellos cuando toda la tirada queda revelada.
+  const yaFestejado = useRef(false);
+  useEffect(() => {
+    if (todasReveladas && !yaFestejado.current) {
+      yaFestejado.current = true;
+      const t = setTimeout(granFinale, compacta ? 250 : 700);
+      return () => clearTimeout(t);
+    }
+    if (!todasReveladas) yaFestejado.current = false;
+  }, [todasReveladas, compacta]);
 
   async function pedirLectura() {
     // Paywall: si ya usó su(s) lectura(s) gratis, no llama a la IA.
@@ -384,6 +469,12 @@ export default function LenormandApp() {
       <header className="header">
         <div className="header-barra" />
         <div className="header-inner">
+          <img
+            src="/img/logo-badge.webp"
+            alt="El Hilo del Destino"
+            className="logo-header"
+            onClick={volver}
+          />
           <h1 className="titulo" onClick={volver}>
             El Hilo del Destino
           </h1>
@@ -393,18 +484,27 @@ export default function LenormandApp() {
 
       {pantalla === "inicio" && (
         <main className="inicio">
-          <section className="hero">
-            <h2 className="hero-titulo">
-              Consultá tu tirada de Lenormand, gratis
-            </h2>
-            <p className="intro">
-              El oráculo Lenormand se lee combinando las cartas entre sí.
-              Elegí una tirada, mezclá la baraja y recibí una interpretación
-              generada por inteligencia artificial leyendo las combinaciones.
-            </p>
+          <section className="hero-slide">
+            <img src="/img/hero-slide.webp" alt="" />
           </section>
 
-          <div className="grid-tiradas">
+          <section className="hero">
+            <div className="hero-texto">
+              <h2 className="hero-titulo">
+                Consultá tu tirada de Lenormand, gratis
+              </h2>
+              <p className="intro">
+                El oráculo Lenormand se lee combinando las cartas entre sí.
+                Elegí una tirada, mezclá la baraja y recibí una interpretación
+                generada por inteligencia artificial leyendo las combinaciones.
+              </p>
+            </div>
+            <div className="hero-img">
+              <img src="/img/hero-ilustracion.webp" alt="" />
+            </div>
+          </section>
+
+          <div className="grid-tiradas" id="tiradas">
             {Object.entries(TIRADAS).map(([key, t], idx) => (
               <button
                 key={key}
@@ -413,11 +513,15 @@ export default function LenormandApp() {
                 onClick={() => iniciar(key)}
               >
                 {t.badge && <span className="tirada-badge">{t.badge}</span>}
-                <span className="tirada-icono">{t.icono}</span>
+                <span className="tirada-icono">
+                  <img src={t.icono} alt="" className="tirada-icono-img" />
+                </span>
                 <span className="tirada-nombre">{t.nombre}</span>
                 <span className="tirada-desc">{t.desc}</span>
                 <span className="tirada-meta">{t.n} carta{t.n > 1 ? "s" : ""}</span>
-                <span className="tirada-cta">Consultar →</span>
+                <span className="tirada-cta">
+                  Consultar <ArrowRight size={16} strokeWidth={2.5} />
+                </span>
               </button>
             ))}
           </div>
@@ -428,11 +532,11 @@ export default function LenormandApp() {
         <main className="mesa">
           <div className="mesa-head">
             <button className="btn-ghost" onClick={volver}>
-              ← Volver
+              <ArrowLeft size={17} strokeWidth={2.4} /> Volver
             </button>
             <h2 className="mesa-titulo">{tirada.nombre}</h2>
             <button className="btn-ghost" onClick={() => iniciar(tiradaKey)}>
-              ↻ Remezclar
+              <Shuffle size={17} strokeWidth={2.4} /> Remezclar
             </button>
           </div>
 
@@ -459,8 +563,8 @@ export default function LenormandApp() {
                 carta={c}
                 posicion={tirada.posiciones[i]}
                 revelada={!!reveladas[i]}
-                onClick={() => revelar(i)}
-                delay={compacta ? i * 30 : i * 120}
+                onClick={(e) => revelar(i, e)}
+                index={i}
                 compacta={compacta}
               />
             ))}
@@ -477,7 +581,7 @@ export default function LenormandApp() {
 
           {!todasReveladas && (
             <button className="btn-secundario" onClick={revelarTodas}>
-              Dar vuelta todas las cartas
+              <Eye size={18} strokeWidth={2.2} /> Dar vuelta todas las cartas
             </button>
           )}
 
@@ -489,9 +593,14 @@ export default function LenormandApp() {
                   onClick={pedirLectura}
                   disabled={cargando}
                 >
-                  {cargando
-                    ? "Leyendo las combinaciones…"
-                    : "✦ Interpretar la tirada"}
+                  {cargando ? (
+                    "Leyendo las combinaciones…"
+                  ) : (
+                    <>
+                      <WandSparkles size={19} strokeWidth={2.2} /> Interpretar la
+                      tirada
+                    </>
+                  )}
                 </button>
               )}
 
@@ -506,14 +615,18 @@ export default function LenormandApp() {
 
               {interpretacion && (
                 <div className="interpretacion">
-                  <h3>✦ Tu lectura ✦</h3>
+                  <h3>
+                    <Sparkles size={20} strokeWidth={2} /> Tu lectura
+                  </h3>
                   <Markdown texto={interpretacion} />
                 </div>
               )}
 
               {debePagar && (
                 <div className="paywall" ref={resultRef}>
-                  <div className="paywall-orn">🔮</div>
+                  <div className="paywall-orn">
+                    <Sparkles size={40} strokeWidth={1.6} />
+                  </div>
                   <h3>El oráculo tiene más para revelarte</h3>
                   <p>
                     Ya disfrutaste de tu lectura de regalo. El hilo del destino
@@ -529,7 +642,8 @@ export default function LenormandApp() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Continuar por WhatsApp →
+                    <MessageCircle size={19} strokeWidth={2.2} /> Continuar por
+                    WhatsApp
                   </a>
                   <small className="paywall-nota">
                     Te respondemos a la brevedad para habilitar tu lectura.
@@ -539,6 +653,30 @@ export default function LenormandApp() {
             </section>
           )}
         </main>
+      )}
+
+      {pantalla === "inicio" && (
+        <section className="banner-compartir">
+          <div className="banner-overlay">
+            <h3>
+              <Sparkles size={20} strokeWidth={2} /> Regalá una lectura
+            </h3>
+            <p>
+              Compartí El Hilo del Destino con quien quieras, o volvé a tirar
+              las cartas para explorar otra pregunta.
+            </p>
+            <button
+              className="btn-banner"
+              onClick={() =>
+                document
+                  .getElementById("tiradas")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              Elegir otra tirada <ArrowRight size={16} strokeWidth={2.5} />
+            </button>
+          </div>
+        </section>
       )}
 
       <footer className="footer">
@@ -576,14 +714,21 @@ function Estilos() {
         --texto-suave: #64748b;
         --borde: #e3ecf1;
         min-height: 100vh;
-        background: var(--fondo);
+        background-color: var(--fondo);
         color: var(--texto);
         font-family: 'Nunito', sans-serif;
         position: relative; overflow-x: hidden;
         padding-bottom: 4rem;
       }
+      /* textura sutil repetible superpuesta al color de fondo */
+      .app::before {
+        content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background-image: url('/img/textura-fondo.webp');
+        background-repeat: repeat; background-size: 340px;
+        opacity: 0.5;
+      }
 
-      .header, .inicio, .mesa, .footer { position: relative; z-index: 1; }
+      .header, .inicio, .mesa, .footer, .banner-compartir { position: relative; z-index: 1; }
 
       /* HEADER */
       .header { text-align: center; }
@@ -593,10 +738,18 @@ function Estilos() {
       }
       .header-inner {
         background: var(--superficie);
-        padding: 2.2rem 1rem 1.6rem;
+        padding: 1.6rem 1rem 1.6rem;
         border-bottom: 1px solid var(--borde);
         box-shadow: 0 2px 14px rgba(15,60,75,0.05);
+        display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
       }
+      .logo-header {
+        height: 52px; width: auto; cursor: pointer;
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(10,32,39,0.22);
+        transition: transform .2s ease;
+      }
+      .logo-header:hover { transform: translateY(-2px) scale(1.02); }
       .titulo {
         font-family: 'Poppins', sans-serif; font-weight: 700;
         font-size: clamp(1.7rem, 5vw, 2.5rem);
@@ -608,17 +761,39 @@ function Estilos() {
         font-size: 0.9rem; margin-top: 0.4rem; font-weight: 600;
       }
 
-      /* HERO */
-      .hero {
-        max-width: 680px; margin: 2.6rem auto 2rem; text-align: center; padding: 0 1rem;
+      /* HERO SLIDE (banner bajo el header) */
+      .hero-slide {
+        max-width: 1100px; margin: 1.8rem auto 0; padding: 0 1rem;
       }
+      .hero-slide img {
+        display: block; width: 100%; height: auto;
+        border-radius: 18px;
+        box-shadow: 0 14px 40px rgba(15,60,75,0.16);
+        border: 1px solid var(--borde);
+      }
+
+      /* HERO (texto + ilustracion) */
+      .hero {
+        max-width: 1040px; margin: 2.4rem auto 2.4rem; padding: 0 1rem;
+        display: grid; grid-template-columns: 1.05fr 0.95fr;
+        gap: 1.5rem; align-items: center;
+      }
+      .hero-texto { text-align: left; }
       .hero-titulo {
         font-family: 'Poppins', sans-serif; font-weight: 700;
-        font-size: clamp(1.4rem, 4vw, 2rem); color: var(--texto);
-        margin-bottom: 0.9rem;
+        font-size: clamp(1.4rem, 4vw, 2.1rem); color: var(--texto);
+        margin-bottom: 0.9rem; line-height: 1.2;
       }
       .intro {
         font-size: 1.05rem; line-height: 1.65; color: var(--texto-suave);
+      }
+      .hero-img img {
+        display: block; width: 100%; height: auto; border-radius: 16px;
+      }
+      @media (max-width: 720px) {
+        .hero { grid-template-columns: 1fr; text-align: center; }
+        .hero-texto { text-align: center; }
+        .hero-img { max-width: 420px; margin: 0 auto; }
       }
 
       /* GRID DE TIRADAS */
@@ -650,7 +825,16 @@ function Estilos() {
         letter-spacing: 0.03em; padding: 0.3rem 0.7rem; border-radius: 999px;
         box-shadow: 0 3px 10px rgba(0,0,0,0.12);
       }
-      .tirada-icono { font-size: 1.9rem; margin-bottom: 0.2rem; }
+      .tirada-icono {
+        width: 62px; height: 62px; margin-bottom: 0.4rem;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 16px;
+        background: radial-gradient(120% 120% at 50% 32%, #0e3a46 0%, #0a2027 100%);
+        box-shadow: 0 6px 16px rgba(10,32,39,0.28), inset 0 1px 0 rgba(255,255,255,0.05);
+      }
+      .tirada-icono-img {
+        width: 52px; height: 52px; object-fit: contain; display: block;
+      }
       .tirada-nombre {
         font-family: 'Poppins', sans-serif; font-size: 1.12rem; font-weight: 700;
         color: var(--turquesa-fuerte);
@@ -663,6 +847,7 @@ function Estilos() {
       .tirada-cta {
         color: var(--turquesa-fuerte); font-family: 'Poppins', sans-serif;
         font-weight: 700; font-size: 0.92rem; margin-top: 0.3rem;
+        display: inline-flex; align-items: center; gap: 0.35rem;
       }
 
       /* MESA DE TIRADA */
@@ -681,6 +866,7 @@ function Estilos() {
         color: var(--turquesa-fuerte); padding: 0.55rem 1.05rem; border-radius: 8px;
         cursor: pointer; font-family: 'Nunito', sans-serif; font-weight: 700;
         font-size: 0.95rem; transition: all .2s; white-space: nowrap;
+        display: inline-flex; align-items: center; gap: 0.4rem;
       }
       .btn-ghost:hover { background: var(--turquesa-suave); border-color: var(--turquesa); }
 
@@ -709,7 +895,6 @@ function Estilos() {
 
       .carta-wrap {
         display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
-        opacity: 0; animation: aparecer 0.5s forwards;
       }
       .carta-pos {
         font-family: 'Poppins', sans-serif; font-size: 0.66rem; font-weight: 700;
@@ -737,6 +922,29 @@ function Estilos() {
       .carta:hover .carta-dorso { border-color: var(--turquesa); }
       .carta-frente { transform: rotateY(180deg); border: 2px solid var(--dorado); }
 
+      /* brillo holografico que barre la carta al revelarse */
+      .carta-brillo {
+        position: absolute; inset: 0; pointer-events: none; z-index: 2;
+        background: linear-gradient(115deg,
+          transparent 32%,
+          rgba(255,255,255,0.55) 47%,
+          rgba(255,255,255,0.0) 60%);
+        transform: translateX(-130%);
+      }
+      .carta.revelada .carta-brillo { animation: brillo 1s ease 0.45s 1; }
+      @keyframes brillo {
+        from { transform: translateX(-130%); }
+        to { transform: translateX(130%); }
+      }
+      /* aura dorada palpitante en cartas reveladas (tiradas chicas) */
+      .carta-wrap:not(.compacta) .carta.revelada .carta-frente {
+        animation: aura 2.6s ease-in-out 0.7s infinite;
+      }
+      @keyframes aura {
+        0%, 100% { box-shadow: 0 6px 18px rgba(15,60,75,0.16); }
+        50% { box-shadow: 0 6px 20px rgba(15,60,75,0.16), 0 0 26px rgba(240,201,41,0.55); }
+      }
+
       .carta-label {
         font-family: 'Poppins', sans-serif; font-size: 0.8rem; font-weight: 600;
         color: var(--texto); text-align: center; max-width: 140px; line-height: 1.2;
@@ -759,7 +967,8 @@ function Estilos() {
       .detalle-carta em { color: var(--dorado-fuerte); font-style: normal; font-weight: 700; }
 
       .btn-secundario, .btn-principal {
-        display: block; margin: 0 auto 2rem; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 0.55rem;
+        margin: 0 auto 2rem; cursor: pointer;
         font-family: 'Poppins', sans-serif; font-weight: 700; letter-spacing: 0.01em;
         border-radius: 10px; transition: all .25s;
       }
@@ -810,7 +1019,8 @@ function Estilos() {
       }
       .interpretacion h3 {
         font-family: 'Poppins', sans-serif; color: var(--turquesa-fuerte); font-weight: 700;
-        text-align: center; font-size: 1.3rem; margin-bottom: 1.2rem;
+        font-size: 1.3rem; margin-bottom: 1.2rem;
+        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
       }
       .md p { font-size: 1.08rem; line-height: 1.7; margin-bottom: 1rem; color: var(--texto); }
       .md strong {
@@ -828,7 +1038,10 @@ function Estilos() {
         box-shadow: 0 16px 40px rgba(15,60,75,0.1);
         animation: aparecer .6s forwards;
       }
-      .paywall-orn { font-size: 2.4rem; margin-bottom: 0.6rem; }
+      .paywall-orn {
+        color: var(--dorado-fuerte); margin-bottom: 0.6rem;
+        display: flex; justify-content: center;
+      }
       .paywall h3 {
         font-family: 'Poppins', sans-serif; color: var(--texto); font-weight: 700;
         font-size: 1.3rem; margin-bottom: 0.9rem;
@@ -869,6 +1082,44 @@ function Estilos() {
       .footer-marca {
         margin-top: 0.4rem; font-family: 'Poppins', sans-serif;
         font-weight: 700; color: var(--turquesa-fuerte); font-size: 0.85rem;
+      }
+
+      /* BANNER COMPARTIR */
+      .banner-compartir { max-width: 1040px; margin: 3.5rem auto 0; padding: 0 1rem; }
+      .banner-overlay {
+        position: relative;
+        background-image:
+          linear-gradient(90deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.78) 42%, rgba(255,255,255,0.12) 100%),
+          url('/img/banner-compartir.webp');
+        background-size: cover; background-position: center right;
+        border: 1px solid var(--borde); border-radius: 18px;
+        padding: 2.2rem 2rem; min-height: 190px;
+        box-shadow: 0 10px 30px rgba(15,60,75,0.08);
+        display: flex; flex-direction: column; justify-content: center;
+        align-items: flex-start; gap: 0.7rem;
+      }
+      .banner-overlay h3 {
+        font-family: 'Poppins', sans-serif; color: var(--turquesa-fuerte);
+        font-size: 1.35rem; font-weight: 700;
+        display: flex; align-items: center; gap: 0.5rem;
+      }
+      .banner-overlay p { color: var(--texto); max-width: 460px; line-height: 1.55; font-size: 1.02rem; }
+      .btn-banner {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: linear-gradient(135deg, var(--turquesa), var(--turquesa-claro));
+        color: #fff; border: none; padding: 0.75rem 1.5rem; border-radius: 10px;
+        font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 0.95rem;
+        cursor: pointer; box-shadow: 0 8px 20px rgba(14,157,187,0.3); transition: all .2s;
+      }
+      .btn-banner:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(14,157,187,0.42); }
+      @media (max-width: 620px) {
+        .banner-overlay {
+          background-image:
+            linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.72) 100%),
+            url('/img/banner-compartir.webp');
+          text-align: center; align-items: center;
+        }
+        .banner-overlay p { text-align: center; }
       }
 
       @keyframes subir { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
